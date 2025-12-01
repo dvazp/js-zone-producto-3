@@ -1,5 +1,5 @@
 // Importamos Express, el framework para crear el servidor
-const express = require('express');
+import express from 'express';
 
 // Definimos el puerto donde correrá el servidor (3000 por defecto)
 const PORT = process.env.PORT || 3000;
@@ -11,17 +11,18 @@ const app = express();
 app.use(express.json());
 
 // Importamos los datos base de usuarios desde el frontend
-import { usuariosBase } from '../frontend/js/datos';
-import { voluntariadosBase } from '../frontend/js/datos';
+import { usuariosBase } from '../frontend/js/datos.js';
+import { voluntariadosBase } from '../frontend/js/datos.js';
 
 // ========================================
 // INICIALIZACIÓN DE DATOS
 // ========================================
 
-// Copiamos los voluntari
-
+// Copiamos los voluntarios a una variable que va a actuar como base de datos.
+let voluntariados = voluntariadosBase;
 // Copiamos los usuarios base a una variable que actuará como "base de datos" en memoria
 let usuarios = usuariosBase;
+
 
 // ========================================
 // INICIO DEL SERVIDOR
@@ -110,4 +111,69 @@ app.delete("/usuarios/:email", (req, res) => {
         res.status(404).json({ message: "Usuario no encontrado" });
     }
 });
+
+// ========================================
+// RUTA: GET /voluntariados
+// Obtener todos los voluntariados disponibles
+// ========================================
+
+app.get("/voluntariados", (req, res) => {
+    // Imprimimos en consola los voluntariados actuales
+    console.log("Estos son los voluntariados disponibles" + voluntariados);
+    
+    // Enviamos la lista completa de voluntariados como respuesta JSON
+    res.json(voluntariados);
+});
+
+// ========================================
+// RUTA: POST /usuarios
+// Crear un nuevo voluntariado
+// ========================================
+app.post("/voluntariados", (req, res) => {
+    // Obtenemos los datos del nuevo usuario del cuerpo de la petición
+    const nuevoVoluntario = req.body;
+    
+    // Verificamos si ya existe un voluntariado con ese titulo
+    const existeVoluntariado = voluntariados.find(u => u.id === nuevoVoluntario.id);
+    
+    if (existeVoluntariado) {
+        // Si existe, solo mostramos mensaje en consola (DEBERÍA devolver error)
+        console.log("este voluntariado ya existe");
+        res.status(500).json({message:"Este voluntariado ya existe"})
+    } else {
+        // Si no existe, agregamos el nuevo voluntariado al array
+        voluntariados.push(nuevoVoluntario);
+        // Respondemos con código 201 (Creado) y mensaje de éxito
+        res.status(201).json({ message: "Voluntariado creado correctamente" });
+    }
+});
+
+// ========================================
+// RUTA: DELETE /voluntariados/:id
+// Eliminar un voluntariado por id
+// ========================================
+app.delete("/voluntariados/:id", (req, res) => {
+    // Extraemos el id de los parámetros (usando desestructuración)
+    const { id } = req.params;
+
+    // Pasamos el id a numero ya que lo coge como String
+    const idNumero = Number(id)
+    
+    // Buscamos la posición del voluntariado en el array
+    const index = voluntariados.findIndex(u => u.id === idNumero);
+    
+    // Si encontramos el voluntariado (index diferente de -1)
+    if (index !== -1) {
+        // Eliminamos el voluntariado del array usando splice
+        voluntariados.splice(index, 1);
+        
+        // Respondemos con mensaje de éxito
+        res.json({ message: "Voluntariado eliminado con exito" });
+    } else {
+        // Si no existe, devolvemos error 404
+        res.status(404).json({ message: "Voluntariado no encontrado" });
+    }
+});
+
+
 
