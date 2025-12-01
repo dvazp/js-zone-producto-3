@@ -12,10 +12,13 @@ app.use(express.json());
 
 // Importamos los datos base de usuarios desde el frontend
 import { usuariosBase } from '../frontend/js/datos';
+import { voluntariadosBase } from '../frontend/js/datos';
 
 // ========================================
 // INICIALIZACIÓN DE DATOS
 // ========================================
+
+// Copiamos los voluntari
 
 // Copiamos los usuarios base a una variable que actuará como "base de datos" en memoria
 let usuarios = usuariosBase;
@@ -107,3 +110,4 @@ app.delete("/usuarios/:email", (req, res) => {
         res.status(404).json({ message: "Usuario no encontrado" });
     }
 });
+
