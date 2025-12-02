@@ -110,11 +110,28 @@ const typeDefs = `
   }
 
 
+  enum TipoVoluntariado{
+  Oferta
+  Peticion
+  }
+
+  scalar Date
+  type Voluntariado{
+        titulo: String! 
+        usuario: String!
+        fecha: Date!
+        descripcion: String!
+        tipo: TipoVoluntariado!
+        email:String!
+        id:ID!
+  }
+
 
   type Query {
     usuarios: [Usuario!]!
     usuario(email: String!): Usuario
-
+    voluntariados:[Voluntariado]
+    voluntariado(id: ID!): Voluntariado
   }
 
   type Mutation {
@@ -125,9 +142,20 @@ const typeDefs = `
       nombre: String!
       tipo: String!
     ): Usuario!
-    
+
+    crearVoluntariado(
+        titulo: String! 
+        usuario: String!
+        fecha: Date!
+        descripcion: String!
+        tipo: TipoVoluntariado!
+        email:String!
+    ): Voluntariado!
+
+
+    eliminarVoluntariado(id: ID!): ID!
     eliminarUsuario(email: String!): String!
-    
+}
 
 `;
 
@@ -135,7 +163,8 @@ const resolvers = {
   Query: {
     usuarios: () => usuarios,
     usuario: (parent, args) => usuarios.find(u => u.email === args.email),
-
+    voluntariados:() => voluntariados,
+    voluntariado:(parent,args) => voluntariados.find(v => v.id === args.id),
   },
 
   Mutation: {
@@ -159,7 +188,30 @@ const resolvers = {
       return 'Usuario eliminado con éxito';
     },
 
+    crearVoluntariado:(parent,args) =>{
+    const {titulo,usuario,fecha,descripcion,tipo,email} = args;
+    const nuevaID = (voluntariados.length+1).toString();
+    const nuevoVoluntariado = {
+    id: nuevaID,
+    titulo,
+    usuario,
+    fecha,
+    descripcion,
+    tipo,
+    email
+    };
+    voluntariados.push(nuevoVoluntariado);
+    return nuevoVoluntariado;
+    },
 
+    eliminarVoluntariado:(parent,args) =>{
+    const index = voluntariados.findIndex(v => v.id === args.id);
+    if (index === -1) {
+        throw new Error('Voluntariado no encontrado');
+      }
+      voluntariados.splice(index, 1);
+      return args.id;
+    }
   }
 };
 

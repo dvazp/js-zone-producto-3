@@ -32,7 +32,7 @@ let voluntariadosBase = [
         usuario : "Alejandra",
         fecha : "16-10-2025",
         descripcion : "Se busca una persona para cuidar de un gato de 3 meses.",
-        tipo : "Petición",
+        tipo : "Peticion",
         email: "alejandra@mail.com",
         id: 3
     }
