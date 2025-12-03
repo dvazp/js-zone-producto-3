@@ -1,6 +1,6 @@
 // Importamos Express, el framework para crear el servidor
 import express from 'express';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId  } from 'mongodb';
 
 // Definimos el puerto donde correrá el servidor (3000 por defecto)
 const PORT = process.env.PORT || 3000;
@@ -18,6 +18,7 @@ import { voluntariadosBase } from '../frontend/js/datos.js';
 */
 let usuariosCollection;
 let voluntariadosCollection;
+let seleccionadosCollection;
 
 //Conexion MongoDB
 const MONGO_URI =  'mongodb://127.0.0.1:27017';
@@ -30,6 +31,7 @@ async function conectarMongo(){
   const db = client.db(DB_NAME);
   usuariosCollection = db.collection('usuarios');
   voluntariadosCollection = db.collection('voluntariados');
+  seleccionadosCollection = db.collection('seleccionados');
 console.log("Conectado a MongoDB");
 }
 
@@ -76,6 +78,10 @@ app.get('/usuarios/:email', async (req, res) => {
 app.post('/usuarios', async (req, res) => {
   try {
     const nuevoUsuario = req.body;
+    if (!nuevoUsuario || !nuevoUsuario.email) {
+      return res.status(400).json({ message: 'Datos de usuario inválidos. Se requiere email.' });
+    }
+
     const existeUsuario = await usuariosCollection.findOne({ email: nuevoUsuario.email });
 
     if (existeUsuario) {
@@ -107,33 +113,82 @@ app.delete('/usuarios/:email', async (req, res) => {
 });
 
 
-app.get("/voluntariados", (req, res) => {
-    console.log("Estos son los voluntariados disponibles" + voluntariados);
+app.get('/voluntariados', async (req, res) => {
+  try {
+    const voluntariados = await voluntariadosCollection.find().toArray();
     res.json(voluntariados);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error obteniendo voluntariados' });
+  }
 });
 
-app.post("/voluntariados", (req, res) => {
-    const nuevoVoluntario = req.body;
-    const existeVoluntariado = voluntariados.find(u => u.id === nuevoVoluntario.id);
-    if (existeVoluntariado) {
-        console.log("este voluntariado ya existe");
-        res.status(500).json({ message: "Este voluntariado ya existe" })
-    } else {
-        voluntariados.push(nuevoVoluntario);
-        res.status(201).json({ message: "Voluntariado creado correctamente" });
-    }
+app.post('/voluntariados', async (req, res) => {
+  try {
+    const nuevoVoluntariado = req.body;
+    const result = await voluntariadosCollection.insertOne(nuevoVoluntariado);
+    res.status(201).json({ message: 'Voluntariado creado con éxito', insertedId: result.insertedId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error creando voluntariado' });
+  }
 });
 
-app.delete("/voluntariados/:id", (req, res) => {
+app.delete('/voluntariados/:id', async (req, res) => {
+  try {
     const { id } = req.params;
-    const idNumero = Number(id)
-    const index = voluntariados.findIndex(u => u.id === idNumero);
-    if (index !== -1) {
-        voluntariados.splice(index, 1);
-        res.json({ message: "Voluntariado eliminado con exito" });
-    } else {
-        res.status(404).json({ message: "Voluntariado no encontrado" });
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'ID de voluntariado inválido' });
     }
+    const result = await voluntariadosCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'Voluntariado no encontrado' });
+    }
+    // También lo eliminamos de los seleccionados si estaba allí
+    await seleccionadosCollection.deleteOne({ voluntariadoId: new ObjectId(id) });
+    res.json({ message: 'Voluntariado eliminado con éxito' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error eliminando voluntariado' });
+  }
+});
+
+// --- Rutas para Seleccionados ---
+app.get('/seleccionados', async (req, res) => {
+  try {
+    const seleccionados = await seleccionadosCollection.find().toArray();
+    const ids = seleccionados.map(item => item.voluntariadoId);
+    res.json(ids);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error obteniendo seleccionados' });
+  }
+});
+
+app.post('/seleccionados', async (req, res) => {
+  try {
+    const { voluntariadoId } = req.body;
+    if (!voluntariadoId || !ObjectId.isValid(voluntariadoId)) {
+      return res.status(400).json({ message: 'ID de voluntariado inválido' });
+    }
+    await seleccionadosCollection.updateOne({ voluntariadoId: new ObjectId(voluntariadoId) }, { $setOnInsert: { voluntariadoId: new ObjectId(voluntariadoId) } }, { upsert: true });
+    res.status(201).json({ message: 'Seleccionado agregado con éxito' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error agregando seleccionado' });
+  }
+});
+
+app.delete('/seleccionados/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await seleccionadosCollection.deleteOne({ voluntariadoId: new ObjectId(id) });
+    res.json({ message: 'Seleccionado eliminado con éxito' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error eliminando seleccionado' });
+  }
 });
 
 // ========================================
@@ -145,6 +200,7 @@ import { startStandaloneServer } from '@apollo/server/standalone';
 
 const typeDefs = `
   type Usuario {
+    _id: ID!
     user: String!
     email: String!
     password: String!
@@ -160,6 +216,7 @@ const typeDefs = `
 
   scalar Date
   type Voluntariado{
+        _id: ID!
         titulo: String! 
         usuario: String!
         fecha: Date!
@@ -174,6 +231,7 @@ const typeDefs = `
     usuarios: [Usuario!]!
     usuario(email: String!): Usuario
     voluntariados:[Voluntariado]
+    seleccionados: [Voluntariado]
     voluntariado(id: ID!): Voluntariado
   }
 
@@ -195,6 +253,8 @@ const typeDefs = `
         email:String!
     ): Voluntariado!
 
+    agregarSeleccionado(voluntariadoId: ID!): Voluntariado
+    borrarSeleccionado(voluntariadoId: ID!): ID
 
     eliminarVoluntariado(id: ID!): ID!
     eliminarUsuario(email: String!): String!
@@ -210,8 +270,19 @@ const resolvers = {
     usuario: async (parent, args) => {
       return await usuariosCollection.findOne({ email: args.email });
     },
-    voluntariados:() => voluntariados,
-    voluntariado:(parent,args) => voluntariados.find(v => v.id === args.id),
+    voluntariados: async () => {
+      return await voluntariadosCollection.find().toArray();
+    },
+    voluntariado: async (parent, args) => {
+      return await voluntariadosCollection.findOne({ _id: new ObjectId(args.id) });
+    },
+    seleccionados: async () => {
+      const seleccionados = await seleccionadosCollection.find().toArray();
+      const ids = seleccionados.map(s => s.voluntariadoId);
+      return await voluntariadosCollection.find({
+        _id: { $in: ids }
+      }).toArray();
+    },
   },
 
   Mutation: {
@@ -236,29 +307,34 @@ const resolvers = {
       return 'Usuario eliminado con éxito';
     },
 
-    crearVoluntariado:(parent,args) =>{
-    const {titulo,usuario,fecha,descripcion,tipo,email} = args;
-    const nuevaID = (voluntariados.length+1).toString();
-    const nuevoVoluntariado = {
-    id: nuevaID,
-    titulo,
-    usuario,
-    fecha,
-    descripcion,
-    tipo,
-    email
-    };
-    voluntariados.push(nuevoVoluntariado);
-    return nuevoVoluntariado;
+    crearVoluntariado: async (parent, args) => {
+      const nuevoVoluntariado = { ...args };
+      const result = await voluntariadosCollection.insertOne(nuevoVoluntariado);
+      return { ...nuevoVoluntariado, _id: result.insertedId, id: result.insertedId.toString() };
     },
 
-    eliminarVoluntariado:(parent,args) =>{
-    const index = voluntariados.findIndex(v => v.id === args.id);
-    if (index === -1) {
+    eliminarVoluntariado: async (parent, args) => {
+      const result = await voluntariadosCollection.deleteOne({ _id: new ObjectId(args.id) });
+      if (result.deletedCount === 0) {
         throw new Error('Voluntariado no encontrado');
       }
-      voluntariados.splice(index, 1);
+      // También lo eliminamos de los seleccionados si estaba allí
+      await seleccionadosCollection.deleteOne({ voluntariadoId: new ObjectId(args.id) });
       return args.id;
+    },
+
+    agregarSeleccionado: async (_, { voluntariadoId }) => {
+      const voluntariado = await voluntariadosCollection.findOne({ _id: new ObjectId(voluntariadoId) });
+      if (!voluntariado) {
+        throw new Error('Voluntariado no encontrado');
+      }
+      await seleccionadosCollection.updateOne({ voluntariadoId: new ObjectId(voluntariadoId) }, { $setOnInsert: { voluntariadoId: new ObjectId(voluntariadoId) } }, { upsert: true });
+      return voluntariado;
+    },
+
+    borrarSeleccionado: async (_, { voluntariadoId }) => {
+      await seleccionadosCollection.deleteOne({ voluntariadoId: new ObjectId(voluntariadoId) });
+      return voluntariadoId;
     }
   }
 };
