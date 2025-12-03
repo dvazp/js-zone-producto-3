@@ -1,5 +1,6 @@
 // Importamos Express, el framework para crear el servidor
 import express from 'express';
+import { MongoClient } from 'mongodb';
 
 // Definimos el puerto donde correrá el servidor (3000 por defecto)
 const PORT = process.env.PORT || 3000;
@@ -11,58 +12,100 @@ const app = express();
 app.use(express.json());
 
 // Importamos los datos base de usuarios desde el frontend
+/*
 import { usuariosBase } from '../frontend/js/datos.js';
 import { voluntariadosBase } from '../frontend/js/datos.js';
+*/
+let usuariosCollection;
+let voluntariadosCollection;
 
+//Conexion MongoDB
+const MONGO_URI =  'mongodb://127.0.0.1:27017';
+const DB_NAME = 'jszone';
+
+const client = new MongoClient(MONGO_URI);
+
+async function conectarMongo(){
+  await client.connect();
+  const db = client.db(DB_NAME);
+  usuariosCollection = db.collection('usuarios');
+  voluntariadosCollection = db.collection('voluntariados');
+console.log("Conectado a MongoDB");
+}
+
+await conectarMongo();
 // ========================================
 // INICIALIZACIÓN DE DATOS
 // ========================================
 
-// Copiamos los voluntarios a una variable que va a actuar como base de datos.
+/* Copiamos los voluntarios a una variable que va a actuar como base de datos.
 let voluntariados = voluntariadosBase;
 // Copiamos los usuarios base a una variable que actuará como "base de datos" en memoria
 let usuarios = usuariosBase;
-
+*/
 // ========================================
 // RUTAS REST
 // ========================================
 
-app.get("/usuarios", (req, res) => {
-    console.log("Estos son los usuarios" + usuarios);
+app.get('/usuarios', async (req, res) => {
+  try {
+    const usuarios = await usuariosCollection.find().toArray();
+    console.log('Estos son los usuarios', usuarios);
     res.json(usuarios);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error obteniendo usuarios' });
+  }
 });
 
-app.get("/usuarios/:email", (req, res) => {
+app.get('/usuarios/:email', async (req, res) => {
+  try {
     const email = req.params.email;
-    const usuario = usuarios.find(u => u.email === email);
+    const usuario = await usuariosCollection.findOne({ email });
     if (usuario) {
-        res.json(usuario);
+      res.json(usuario);
     } else {
-        res.status(404).json({ message: "Este usuario no existe" });
+      res.status(404).json({ message: 'Este usuario no existe' });
     }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error buscando usuario' });
+  }
 });
 
-app.post("/usuarios", (req, res) => {
+app.post('/usuarios', async (req, res) => {
+  try {
     const nuevoUsuario = req.body;
-    const existeUsuario = usuarios.find(u => u.email === nuevoUsuario.email);
+    const existeUsuario = await usuariosCollection.findOne({ email: nuevoUsuario.email });
+
     if (existeUsuario) {
-        console.log("este usuario ya existe");
-    } else {
-        usuarios.push(nuevoUsuario);
-        res.status(201).json({ message: "Usuario creado con éxito" });
+      return res.status(400).json({ message: 'Este usuario ya existe' });
     }
+
+    await usuariosCollection.insertOne(nuevoUsuario);
+    res.status(201).json({ message: 'Usuario creado con éxito' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error creando usuario' });
+  }
 });
 
-app.delete("/usuarios/:email", (req, res) => {
+app.delete('/usuarios/:email', async (req, res) => {
+  try {
     const { email } = req.params;
-    const index = usuarios.findIndex(u => u.email === email);
-    if (index !== -1) {
-        usuarios.splice(index, 1);
-        res.json({ message: "Usuario eliminado con éxito" });
-    } else {
-        res.status(404).json({ message: "Usuario no encontrado" });
+    const result = await usuariosCollection.deleteOne({ email });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
     }
+
+    res.json({ message: 'Usuario eliminado con éxito' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error eliminando usuario' });
+  }
 });
+
 
 app.get("/voluntariados", (req, res) => {
     console.log("Estos son los voluntariados disponibles" + voluntariados);
@@ -161,30 +204,35 @@ const typeDefs = `
 
 const resolvers = {
   Query: {
-    usuarios: () => usuarios,
-    usuario: (parent, args) => usuarios.find(u => u.email === args.email),
+    usuarios: async () => {
+      return await usuariosCollection.find().toArray();
+    },
+    usuario: async (parent, args) => {
+      return await usuariosCollection.findOne({ email: args.email });
+    },
     voluntariados:() => voluntariados,
     voluntariado:(parent,args) => voluntariados.find(v => v.id === args.id),
   },
 
   Mutation: {
-    crearUsuario: (parent, args) => {
+    crearUsuario: async (parent, args) => {
       const { user, email, password, nombre, tipo } = args;
-      const existe = usuarios.find(u => u.email === email);
+
+      const existe = await usuariosCollection.findOne({ email });
       if (existe) {
         throw new Error('Usuario ya existe');
       }
+
       const nuevoUsuario = { user, email, password, nombre, tipo };
-      usuarios.push(nuevoUsuario);
+      await usuariosCollection.insertOne(nuevoUsuario);
       return nuevoUsuario;
     },
 
-    eliminarUsuario: (parent, args) => {
-      const index = usuarios.findIndex(u => u.email === args.email);
-      if (index === -1) {
+    eliminarUsuario: async (parent, args) => {
+      const result = await usuariosCollection.deleteOne({ email: args.email });
+      if (result.deletedCount === 0) {
         throw new Error('Usuario no encontrado');
       }
-      usuarios.splice(index, 1);
       return 'Usuario eliminado con éxito';
     },
 
