@@ -1,6 +1,7 @@
 // Importamos Express, el framework para crear el servidor
 import express from 'express';
 import { MongoClient, ObjectId  } from 'mongodb';
+import fs from 'fs/promises'; // Sirve para leer el json de datos.json
 
 // Definimos el puerto donde correrá el servidor (3000 por defecto)
 const PORT = process.env.PORT || 3000;
@@ -23,16 +24,44 @@ let seleccionadosCollection;
 //Conexion MongoDB
 const MONGO_URI =  'mongodb://127.0.0.1:27017';
 const DB_NAME = 'jszone';
-
+const archivoDatos = '../frontend/js/datos.json';
 const client = new MongoClient(MONGO_URI);
 
 async function conectarMongo(){
+  let datos;
+  try {
+    const contenidoJson = await fs.readFile(archivoDatos, 'utf-8');
+    datos = JSON.parse(contenidoJson); // Guardamos en datos todo el json de datos.json
+
+  // Configuración de Conexión
   await client.connect();
   const db = client.db(DB_NAME);
   usuariosCollection = db.collection('usuarios');
   voluntariadosCollection = db.collection('voluntariados');
   seleccionadosCollection = db.collection('seleccionados');
-console.log("Conectado a MongoDB");
+  console.log("Conectado a MongoDB");
+
+  // Inicialización Voluntariados y usuarios.
+
+  const contadorUsuarios = await usuariosCollection.countDocuments(); //Contamos si hay usuarios o no.
+  if(contadorUsuarios === 0){
+    await usuariosCollection.insertMany(datos.usuariosBase);
+    console.log("Inicializando Usuarios");
+  }else{
+    console.log("Los usuarios ya se han inicializado");
+  }
+
+  const contadorVoluntariados = await voluntariadosCollection.countDocuments(); //Contamos si hay usuarios o no.
+  if(contadorVoluntariados === 0){
+    await voluntariadosCollection.insertMany(datos.voluntariadosBase);
+    console.log("Inicializando voluntariados");
+  }else{
+    console.log("Ya hay voluntariados insertados");
+  }
+
+  } catch (error) {
+    console.log("Error al inicializar los datos")
+  }
 }
 
 await conectarMongo();
