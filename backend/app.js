@@ -2,6 +2,8 @@
 import express from 'express';
 import { MongoClient, ObjectId  } from 'mongodb';
 import fs from 'fs/promises'; // Sirve para leer el json de datos.json
+import crearLoginRoute from "./routes/login.js";
+
 
 // Definimos el puerto donde correrá el servidor (3000 por defecto)
 const PORT = process.env.PORT || 3000;
@@ -39,6 +41,7 @@ async function conectarMongo(){
   usuariosCollection = db.collection('usuarios');
   voluntariadosCollection = db.collection('voluntariados');
   seleccionadosCollection = db.collection('seleccionados');
+  app.use("/login", crearLoginRoute(usuariosCollection));
   console.log("Conectado a MongoDB");
 
   // Inicialización Voluntariados y usuarios.
